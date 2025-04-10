@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>A Peek Behind the Curtain: Debug Interfaces and How to Misuse Them</title>
+
+		<link rel="stylesheet" href="dist/reset.css">
+		<link rel="stylesheet" href="dist/reveal.css">
+		<link rel="stylesheet" href="dist/theme/moon.css">
+
+		<!-- Theme used for syntax highlighted code -->
+		<link rel="stylesheet" href="plugin/highlight/monokai.css">
+		<style>
+      .monospace {
+        font-family: "VCR OCD Faux", "VCR OSD Mono", "CozetteVector", monospace;
+      }
+      img.fragment.visible:not(.current-fragment):not(.r-stretch) {
+        display: none;
+      }
+      img.halfwidth {
+        width: 45%;
+        /*margin-top: 10% !important;*/
+      }
+      img.mostheight {
+        height: 65%;
+        /*margin-top: 2% !important;*/
+      }
+      /*span {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+      }*/
+
+      ul.check {
+        list-style: none;
+        margin-left: 0;
+        padding-left: 0;
+      }
+      .check li {
+        padding-left: 1em;
+        text-indent: -1em;
+      }
+      .check li:before {
+        content: "✔";
+        padding-right: 5px;
+        color: #859900;
+      }
+
+      ul.rarrow {
+        list-style: none;
+        margin-left: 0;
+        padding-left: 0;
+      }
+      .rarrow li {
+        padding-left: 1em;
+        text-indent: -1em;
+      }
+      .rarrow li:before {
+        content: "⇒";
+        padding-right: 5px;
+        color: #dc322f;
+      }
+
+      .secondary {
+        font-size: 20pt;
+        color: #586e75;
+        /*font-family: "CMU Serif", "CMU Sans Serif", "Linux Libertine", serif;*/
+      }
+
+      .container {
+        display: flex;
+      }
+      .col {
+        flex: 1;
+      }
+		</style>
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+				<section>
+          <h1>A Peek Behind the Curtain</h1>
+          <h3><a href="#">Debug Interfaces and How to Misuse Them</a></h3>
+					<p>pcy</p>
+				</section>
+        <section>
+          <h2>whoami</h2>
+          <ul>
+            <li>PhD researcher @ COSIC</li>
+            <li>"Evil hardware hacker"</li>
+          </ul>
+          <div class="container">
+            <div class="col">
+              <img data-src="img/37c3.png" class="" />
+              <a href="https://media.ccc.de/v/37c3-11736-nintendo_hacking_2023_2008"
+                 class="secondary">
+                [37C3] Nintendo hacking 2023: 2008: Finishing off the Nintendo DSi</a>
+            </div>
+            <div class="col">
+              <img data-src="img/smolscrn.png" class="" />
+              <span class="secondary">
+                <a href="https://pcy.be/tmp/priv/smol-pres/" class="secondary">
+                DistriNet LLVM Meetup 2024: "smol, the Shoddy Minsize-Oriented Linker"</a>
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <!--
+          * debuggers:
+            * what is a (hardware) debugger? what's a debug interface?
+              * jtag/swd vs debug interface
+            * (dbg vs rom monitor?)
+            * debug locks
+            * dbg itf classifications (msp430 / xtensa/cc25xx / arm/riscv/updi
+                  ARM  : DP    AP    MemAP&Core
+                  RISCV: DTM   DMI   ProgBuf: insn-level
+                                     sysbus: MemAP (1)
+                  UPDI:  CCS   .     .
+              * expand on each
+        -->
+        <section>
+          <section>
+            <h2>Debuggers?</h2>
+            <div class="container">
+              <div class="col">
+                <img data-src="img/nodbg.png" class="" />
+              </div>
+              <div class="col">
+                <div class="fragment">
+                  <img data-src="img/Sipeed_RV_debugger.jpg" class="" />
+                </div>
+                <a class="fragment" href="">
+                  "The JTAG"
+                </a>
+              </div>
+            </div>
+          </section>
+          <section>
+            <h2>Also not this</h2>
+            <div class="container">
+              <div class="col">
+                <img data-src="img/nxboot.jpg" class="" />
+              </div>
+              <div class="col fragment">
+                <img data-src="img/puppeteer.png" class="" style="height: 60%" />
+              </div>
+            </div>
+          </section>
+          <section>
+            <h2>What is a JTAG?</h2>
+            <p>JTAG has:
+            <ul>
+              <li>Pin definitions</li>
+              <li>Voltage signals ↔ bit mapping</li>
+              <li>Chip identification</li>
+              <li class="secondary">More stuff: "scan chain", "boundary scan", state machine, IR &amp; DR, ...</li>
+            </ul></p>
+            <div class="fragment"><p>JTAG does <b>NOT</b> have:</p>
+            <ul>
+              <li>Standardized CPU debug</li>
+              <li>Standardized memory access</li>
+            </ul>
+            <p class="secondary">
+              SWD, cJTAG, Nexus, ...: similar situation
+            </p></div>
+            <h3 class="fragment">Actual debug stuff is vendor-specific!</h3>
+          </section>
+        </section>
+        <section>
+          <section>
+            <h2>Locks</h2>
+            <ul>
+              <li>Debug is useful during development</li>
+              <li>"Dangerous" after deployment
+                <ul class="check">
+                  <li>Extract firmware</li>
+                  <li>Read out secrets (keys!)</li>
+                </ul>
+              </li>
+            </ul>
+            <p></p>
+            <ul class="fragment rarrow">
+              <li><b>lock away debug in factory</b></li>
+            </ul>
+          </section>
+          <section>
+            <h2>Lock levels</h2>
+            <ul>
+              <li>Debug unlocked</li>
+              <li class="fragment"><b>Partial</b> debug access
+                <ul>
+                  <li>No flash access, only RAM</li>
+                  <li>limited features available</li>
+                </ul>
+              </li>
+              <li>Debug locked</li>
+            </ul>
+            <p></p>
+            <ul class="fragment rarrow">
+              <li>Downgrade attacks</li>
+              <li>Bugs in 'partial' protection</li>
+            </ul>
+          </section>
+        </section>
+
+        <section>
+          <section>
+            <h2>How does hardware debug work?</h2>
+            <div class="container">
+              <div class="col">
+                <div><a href="">"Bus-level"</a></div>
+                <!--<p></p>
+
+                TODO: diagram of bus-level (MSP430) debug thing-->
+              </div>
+              <div class="col" style="max-width:3%">↔</div>
+              <div class="col">
+                <div><a href="">"Instruction-level"</a></div>
+
+                <!--TODO: diagram of instruction-level (xtensa/CC2510/some RISC-V) debug thing-->
+              </div>
+              <div class="col" style="max-width:3%">↔</div>
+              <div class="col">
+                <div><a href="">"Memory-level"</a></div>
+                <!--<p></p>
+
+                  TODO: diagram of memory-level (ARM/RISC-V/AVR) debug thing-->
+              </div>
+            </div>
+          </section>
+          <section>
+            <h2>Instruction-level debug</h2>
+
+            <img class="current-visible fragment" data-src="img/insn-lvl-0.png" data-fragment-index="1" />
+            <img class="current-visible fragment" data-src="img/insn-lvl-1.png" data-fragment-index="2" />
+            <img class="current-visible fragment" data-src="img/insn-lvl-2.png" data-fragment-index="3" />
+            <img class="current-visible fragment" data-src="img/insn-lvl-3.png" data-fragment-index="4" />
+            <img class="current-visible fragment" data-src="img/insn-lvl-4.png" data-fragment-index="5" />
+
+            <div class="fragment">
+              <p>Note: not just code execution gadget!</p>
+              <ul class="rarrow">
+                <li>Bypass regular instruction fetching
+                  <p style="text-indent:1em"><span style="color:#dc322f">⇒</span> No activity on bus!</p>
+                </li>
+                <li>CPU paused between 'manual' instructions!</li>
+              </ul>
+            </div>
+            <div class="fragment">
+              <p>Example: Xtensa (ESP32), TI CC2510</p>
+              <img style="width: 30%" data-src="img/esp32.jpg" />
+            </div>
+          </section>
+          <section>
+            <h2>Bus-level debug</h2>
+
+            <img class="current-visible fragment" data-src="img/bus-lvl-0.png" data-fragment-index="1" />
+            <img class="current-visible fragment" data-src="img/bus-lvl-1.png" data-fragment-index="2" />
+            <img class="current-visible fragment" data-src="img/bus-lvl-2.png" data-fragment-index="3" />
+            <img class="current-visible fragment" data-src="img/bus-lvl-3.png" data-fragment-index="4" />
+            <img class="current-visible fragment" data-src="img/bus-lvl-4.png" data-fragment-index="5" />
+            <img class="current-visible fragment" data-src="img/bus-lvl-5.png" data-fragment-index="6" />
+            <img class="current-visible fragment" data-src="img/bus-lvl-6.png" data-fragment-index="7" />
+            <img class="current-visible fragment" data-src="img/bus-lvl-7.png" data-fragment-index="8" />
+            <img class="current-visible fragment" data-src="img/bus-lvl-8.png" data-fragment-index="9" />
+            <img class="current-visible fragment" data-src="img/bus-lvl-9.png" data-fragment-index="10" />
+
+            <div class="fragment">
+              <p>Example: TI MSP430</p>
+              <img style="width: 30%" data-src="img/G3000.jpg" />
+            </div>
+          </section>
+          <section>
+            <h2>Memory-level debug</h2>
+
+            <img class="current-visible fragment" data-src="img/mem-lvl-0.png" data-fragment-index="1" />
+            <img class="current-visible fragment" data-src="img/mem-lvl-1.png" data-fragment-index="2" />
+            <img class="current-visible fragment" data-src="img/mem-lvl-2.png" data-fragment-index="3" />
+            <img class="current-visible fragment" data-src="img/mem-lvl-3.png" data-fragment-index="4" />
+            <img class="current-visible fragment" data-src="img/mem-lvl-4.png" data-fragment-index="5" />
+            <img class="current-visible fragment" data-src="img/mem-lvl-5.png" data-fragment-index="6" />
+            <img class="current-visible fragment" data-src="img/mem-lvl-6.png" data-fragment-index="7" />
+
+            <div class="fragment">
+              <p>Example: Arm, AVR (TPI/UPDI)</p>
+              <img style="width: 30%" data-src="img/attiny.jpg" />
+            </div>
+          </section>
+          <section>
+            <h2>Arm ADI</h2>
+
+            <div class="r-stack">
+              <img class="mostheight" data-src="img/adi.png" style="margin-top: 2%" />
+              <img class="fragment halfwidth" data-src="img/now-i-get-it.png" style="margin-top: 10%" />
+            </div>
+          </section>
+          <section>
+            <h2>Arm ADI, take 2</h2>
+
+            <img class="current-visible fragment" data-src="img/armadi-0.png" data-fragment-index="1" />
+            <img class="current-visible fragment" data-src="img/armadi-1.png" data-fragment-index="2" />
+            <img class="current-visible fragment" data-src="img/armadi-2.png" data-fragment-index="3" />
+            <img class="current-visible fragment" data-src="img/armadi-3.png" data-fragment-index="4" />
+            <img class="current-visible fragment" data-src="img/armadi-4.png" data-fragment-index="5" />
+            <img class="current-visible fragment" data-src="img/armadi-5.png" data-fragment-index="6" />
+          </section>
+        </section>
+        <!--
+          * what can we learn from these:
+            * msp430: cycle timing!!
+            * complex shit: ????? weird bus control? bad states??
+              * memAP: insn fetch bit? (+ STM32F1 bug)
+              * custom ROM table stuff
+              * lock behavior: STM32F0 readout timing bug: https://www.usenix.org/system/files/conference/woot17/woot17-paper-obermaier.pdf
+        -->
+        <section>
+          <h1>What now?</h1>
+        </section>
+        <section>
+          <h2>MSP430 Bus Access</h2>
+          <ul>
+            <li>MSP430 is a <b>multicycling</b> architecture
+              <ul class="secondary"><li>Instruction &gt;1 cycle, no pipelining</li></ul>
+              <img class="current-visible fragment halfwidth" data-src="img/multicycling.png" />
+            </li>
+            <li class="fragment"><b>"Nemesis" attack</b>: side channel information from instruction lengths &amp; write cycles
+              <ul>
+                <li>Break "IP encapsulation" protection &amp; extract secrets
+                  <span class="secondary">(using timer interrupts)</span></li>
+                <span class="rarrow fragment"><li>Debug access: full bus info, don't need interrupts</li></span>
+              </ul>
+            </li>
+          </ul>
+        </section>
+        <section>
+          <section>
+            <h2>Arm Memory Access</h2>
+            <ul>
+              <li><b>STM32F0</b>: debug lock timing bug
+                <p class="secondary">Very first access still goes through</p>
+              </li>
+              <li class="fragment"><b>STM32F1</b>: debug lock only blocks data fetches
+                <p class="secondary">Use debugger for <b>instruction</b> fetches</p>
+              </li>
+              <li class="fragment"><b>nRF51</b>: debug lock only blocks reads, not writes
+                <p class="secondary">Take over CPU to run custom code</p>
+              </li>
+              <li class="fragment"><b>EFM32, ...</b>: lock init at startup: glitchable
+              </li>
+              <li class="fragment"><b>SAML11, ...</b>: custom ROM Table components
+                <p class="secondary">State machine bugs?</p>
+              </li>
+            </ul>
+          </section>
+          <section>
+            <h2>Arm debug locks</h2>
+            <div class="">Possible at any layer!</div>
+            <img class="" data-src="img/armadi-locks.png" />
+          </section>
+        </section>
+        <!--
+          * current research areas & custom framework
+            * problem: existing debuggers (openocd, pyocd, ...) too high-level
+            * introduce custom framework: low-level control
+            * fault injection tool against debug lockouts etc: precise timing of commands & quick retries
+            * fuzzing
+            * reversing uarch??
+        -->
+        <section>
+          <section>
+            <h1>But how?</h1>
+          </section>
+          <section>
+            <h2>Practical problem...</h2>
+            <div class="container">
+              <div class="col fragment">
+                <h3>OpenOCD, PyOCD, ...</h3>
+                <ul>
+                  <li>Complex "all in one" init</li>
+                  <li>Reg &amp; mem access</li>
+                  <li>Break, resume, single-step</li>
+                  <li>Breakpoints, tracing, ...</li>
+                  <li>Write binary to flash</li>
+                  <li>Scriptable but <b>slow &amp; jittery</b></li>
+                </ul>
+              </div>
+              <div class="col fragment">
+                <h3>What we need</h3>
+                <ul>
+                  <li>Fast &amp; light reconnect</li>
+                  <li>Low-level bus transfers</li>
+                  <li>Discover &amp; poke internal ROM tables</li>
+                  <li>Deterministic timing</li>
+                  <li>Use together with oscilloscope, FI rig, ...</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+        </section>
+        <section>
+          <section>
+            <h1>Let's roll our own!</h1>
+          </section>
+          <section>
+            <h2>Custom debug framework</h2>
+            <ul>
+              <li>Low-level access</li>
+              <li>Runs on microcontroller</li>
+              <li><b>Extremely</b> work-in-progress</li>
+              <li>Arm Debug only (for now)</li>
+            </ul>
+          </section>
+          <section>
+            <h2>SAML11 boot ROM &amp; DSU</h2>
+
+            <img class="current-visible fragment" data-src="img/armadi-locks.png" data-fragment-index="1" />
+            <img class="current-visible fragment" data-src="img/armadi-dsu.png" data-fragment-index="2" />
+            <img class="current-visible fragment" data-src="img/armadi-dsu2.png" data-fragment-index="3" />
+          </section>
+          <section>
+            <h2>Current status</h2>
+
+            <ul class="check">
+              <li class="fragment">DP, AP, ROM table, memory map works</li>
+              <li class="fragment">Lock/unlock sequence</li>
+              <li class="fragment">Boot ROM communication</li>
+              <li class="fragment">Load &amp; run test code <b>from debugger</b>
+                <p class="secondary">For glitching setup calibration</p>
+              </li>
+            </ul>
+            <ul>
+              <li class="fragment"><a href="">Actual glitching: WIP</a></li>
+            </ul>
+          </section>
+          <section>
+            <h2>Applications</h2>
+            <ul>
+              <li><b>Attack &amp; extract SAML11 boot ROM</b></li>
+              <li>Develop more debug lock bypass attacks</li>
+              <li>Debug infrastructure fuzzing</li>
+              <li>Microarchitecture reverse-engineering aid</li>
+            </ul>
+            <p></p>
+            <h2 class="fragment">If you're interested: contact me!</h2>
+          </section>
+        </section>
+
+        <section>
+          <h2>Conclusion</h2>
+          <ul>
+            <li>Hardware debug is complicated</li>
+            <li>Many bugs and vulnerabilities to be found</li>
+            <li>Custom framework to do the above
+              <ul><li>WIP, but HMU if interested</li></ul>
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h1>Questions?</h1>
+
+          <h3>Slides: <a href="https://pcy.be/tmp/priv/dbghax-pres/">pcy.be/tmp/priv/dbghax-pres/</a></h3>
+        </section>
+			</div>
+		</div>
+
+		<script src="dist/reveal.js"></script>
+		<script src="plugin/notes/notes.js"></script>
+		<script src="plugin/markdown/markdown.js"></script>
+		<script src="plugin/highlight/highlight.js"></script>
+		<script>
+			// More info about initialization & config:
+			// - https://revealjs.com/initialization/
+			// - https://revealjs.com/config/
+			Reveal.initialize({
+				hash: true,
+        width: 960,
+        height: 800,
+        totalTime: 25*60,
+        slideNumber: true,
+        //showNotes: 'separate-page',
+
+				// Learn about plugins: https://revealjs.com/plugins/
+				plugins: [ RevealMarkdown, RevealHighlight, RevealNotes ]
+			});
+		</script>
+	</body>
+</html>
